@@ -6,7 +6,10 @@ import random
 GCONSTANT = 0.00000000667408
 GM = 398600.4418
 SCALE = 80000
-INC = 2000  # How many ms per frame (50fps)
+INC = 2000  # How many ms per frame (On Earth)
+SOL = 299792458
+pygame.font.init()
+FONT = pygame.font.SysFont(None, 48)
 
 windowHeight = 900
 windowWidth = 1200
@@ -15,7 +18,7 @@ midWidth = windowWidth/2
 pygame.init()
 window = pygame.display.set_mode(
     (windowWidth, windowHeight), pygame.DOUBLEBUF | pygame.HWSURFACE)
-pygame.display.set_caption("GPS")
+pygame.display.set_caption("GPyS")
 clock = pygame.time.Clock()
 
 
@@ -34,6 +37,10 @@ class Earth:
         pygame.draw.circle(window, (0, 0, 230),
                            self.position, self.radius/SCALE)
 
+    def onLoop(self):
+        self.draw()
+        self.clock += INC
+
 
 class Satellite:
     def __init__(self, planet, orbitHeight, startpos=0, color=(255, 0, 0)):
@@ -45,11 +52,12 @@ class Satellite:
         self.orbitHeight = orbitHeight
         self.distanceFromCenter = (self.planet.radius+self.orbitHeight)/SCALE
         self.orbitalSpeed = math.sqrt(GCONSTANT*planet.mass/planet.radius)
-        self.orbitalPeriod = 2*math.pi * \
-            math.sqrt((self.distanceFromCenter**3)/GM)*60*1000
+        self.orbitalPeriod = 2*math.pi*math.sqrt(
+            ((self.orbitHeight+planet.radius) ** 3)/(GCONSTANT*planet.mass))
+        print(self.orbitalPeriod)
         self.eccentricity = 0
 
-        self.clock = 0
+        self.clock = 0.0
 
     def getPos(self):
         distanceFromCenter = self.distanceFromCenter
@@ -66,10 +74,14 @@ class Satellite:
                            drawPos, 5)
 
     def updatePosition(self):
-        self.position = (self.startpos+360*self.clock/self.orbitalPeriod)
+        self.position = (self.startpos+360 *
+                         (self.clock)/self.orbitalPeriod)
+
+    def getLorentz(self):
+        return math.sqrt((1-(self.orbitalSpeed**2/SOL**2)))
 
     def onLoop(self):
-        self.clock += INC
+        self.clock += INC*self.getLorentz()
         self.updatePosition()
         self.draw()
 
@@ -131,8 +143,7 @@ if __name__ == "__main__":
     earth = Earth()
     satList = []
     for i in range(8):
-        satList.append(Satellite(earth, random.randint(
-            10000000, 20180000), 45*i, (0, 0, 255)))
+        satList.append(Satellite(earth, 20180000, 45*i, (0, 0, 255)))
 
     mrObserver = Observer(earth)
     going = True
@@ -142,9 +153,18 @@ if __name__ == "__main__":
             if event.type == pygame.QUIT:
                 going = False
         window.fill((0, 0, 0))
-        earth.draw()
+        earth.onLoop()
         for sat in satList:
             sat.onLoop()
         mrObserver.onLoop(satList)
+        img = FONT.render(str(satList[0].clock), True, (255, 255, 255))
+        window.blit(img, (0, 0))
+        img = FONT.render(str(earth.clock), True, (255, 255, 255))
+        window.blit(img, (0, 20))
+        if earth.clock >= 86400000:
+            print(earth.clock)
+            print(satList[0].clock)
+            going = False
+
         pygame.display.update()
         clock.tick(50)
